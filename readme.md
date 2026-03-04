@@ -198,11 +198,7 @@ This prevents previewed code from accessing the parent application.
 
 # 🧑‍💻 Author
 
-**Imamul Kadir**
-
-Senior Software Engineer  
-LinkedIn:  
-https://linkedin.com/in/imamulkadir
+[**Imamul Kadir**](https://linkedin.com/in/imamulkadir)
 
 ---
 
