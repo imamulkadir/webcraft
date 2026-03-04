@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>WebCraft</title>
+
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- LANDING -->
+    <main id="landing" class="landing" aria-labelledby="appTitle">
+      <div class="landing-card">
+        <div class="title-row">
+          <h1 id="appTitle" class="landing-title">
+            <span class="code-icon">/&gt;</span> WebCraft
+          </h1>
+          <!-- <a
+            class="linkedin-link"
+            href="https://linkedin.com/in/imamulkadir"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="LinkedIn profile"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1 4.98 2.12 4.98 3.5zM0
+        8h5v16H0V8zm7.5 0h4.78v2.19h.07c.67-1.27
+        2.31-2.6 4.75-2.6 5.08 0 6.01 3.34
+        6.01 7.68V24h-5v-7.75c0-1.85-.03-4.23-2.58-4.23-2.58
+        0-2.98 2.01-2.98 4.09V24h-5V8z"
+              />
+            </svg>
+          </a> -->
+        </div>
+        <p class="landing-subtitle">
+          Pick a folder to load files and open a full-screen editor.
+        </p>
+
+        <div class="landing-actions">
+          <label class="btn btn-primary" for="folderPicker">Pick Folder</label>
+          <input
+            id="folderPicker"
+            class="sr-only"
+            type="file"
+            webkitdirectory
+            multiple
+          />
+        </div>
+        <button
+          class="open-drawer-btn"
+          id="openDrawerBtn"
+          type="button"
+          disabled
+        >
+          <span class="icon" aria-hidden="true">→</span>Open Drawer
+        </button>
+
+        <div
+          id="landingStatus"
+          class="landing-status"
+          role="status"
+          aria-live="polite"
+        ></div>
+      </div>
+    </main>
+
+    <!-- WORKSPACE (drawer view) -->
+    <main id="workspace" class="workspace-root" aria-label="Workspace" hidden>
+      <aside class="sidebar" aria-label="Sidebar">
+        <div class="sidebar-top">
+          <button
+            id="backBtn"
+            class="back-btn"
+            type="button"
+            aria-label="Back to landing"
+          >
+            <span class="icon" aria-hidden="true">←</span>
+            <span>Back</span>
+          </button>
+
+          <button class="open-ide-btn" id="openIdeBtn" type="button" disabled>
+            <span class="icon" aria-hidden="true">→</span>Open Editor
+          </button>
+
+          <div class="sidebar-meta">
+            <div class="sidebar-title">Conversion</div>
+            <div id="convMeta" class="sidebar-sub">Loaded folder</div>
+          </div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button
+            id="exportZipBtn"
+            class="btn btn-secondary"
+            type="button"
+            disabled
+          >
+            ⬇ EXPORT PROJECT ZIP
+          </button>
+
+          <div class="sidebar-note">
+            Exports your current in-editor changes. Note: files must be edited
+            in the editor for changes to be included in the export.
+          </div>
+        </div>
+      </aside>
+
+      <section class="content" aria-label="Content">
+        <header class="content-header">
+          <div class="content-title">Workspace Contents</div>
+          <div id="contentSummary" class="content-sub">—</div>
+        </header>
+
+        <section
+          id="contentSections"
+          class="sections"
+          aria-label="All files"
+        ></section>
+      </section>
+    </main>
+
+    <!-- FULLSCREEN IDE MODAL -->
+    <div
+      id="ideModal"
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Editor"
+      hidden
+    >
+      <div class="modal-surface">
+        <header class="modal-header">
+          <div class="modal-header-left">
+            <div class="file-pill">
+              <span class="icon" aria-hidden="true">📄</span>
+              <span id="activeFileName" class="file-pill-name">—</span>
+            </div>
+            <div
+              id="activeFilePath"
+              class="modal-path"
+              title="Active file path"
+            >
+              —
+            </div>
+          </div>
+
+          <div class="modal-header-right">
+            <button
+              id="undoBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Undo"
+            >
+              ↶
+            </button>
+            <button
+              id="redoBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Redo"
+            >
+              ↷
+            </button>
+            <button
+              id="refreshPreviewBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Refresh preview"
+            >
+              ⟳
+            </button>
+            <button
+              id="downloadHtmlBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Download HTML"
+            >
+              ⬇
+            </button>
+            <button
+              id="closeModalBtn"
+              class="icon-btn danger"
+              type="button"
+              aria-label="Close editor"
+            >
+              ✕
+            </button>
+          </div>
+        </header>
+
+        <section id="ideBody" class="ide-body">
+          <section class="pane pane-editor" aria-label="Editor">
+            <div class="pane-header">
+              <div class="pane-title">Editor</div>
+              <div id="editorState" class="pane-state">—</div>
+            </div>
+
+            <div class="pane-wrap">
+              <div
+                id="editorHost"
+                class="editor-host"
+                aria-label="Monaco editor host"
+              ></div>
+
+              <div id="editorPlaceholder" class="placeholder" hidden>
+                <div class="placeholder-title">No text file selected</div>
+                <div class="placeholder-subtitle">
+                  Pick an HTML/CSS/JS/JSON file and click Edit.
+                </div>
+              </div>
+
+              <div id="imageInspector" class="image-inspector" hidden>
+                <div class="image-inspector-inner">
+                  <img id="imageInspectorImg" alt="Selected image preview" />
+                  <div
+                    id="imageInspectorMeta"
+                    class="image-inspector-meta"
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="pane pane-preview" aria-label="Preview">
+            <div class="pane-header">
+              <div class="pane-title">Preview</div>
+              <div id="previewState" class="pane-state">—</div>
+            </div>
+
+            <div class="pane-wrap preview-wrap">
+              <iframe
+                id="previewFrame"
+                title="HTML Preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+                referrerpolicy="no-referrer"
+              ></iframe>
+
+              <div id="noHtmlPreview" class="placeholder" hidden>
+                <div class="placeholder-title">No HTML to preview</div>
+                <div class="placeholder-subtitle">
+                  Select an HTML file to render in the preview pane.
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
