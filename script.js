@@ -1085,10 +1085,18 @@
       
       window.morphdom(doc.documentElement, newDoc.documentElement, {
         onBeforeElUpdated: function(fromEl, toEl) {
-          // Allows morphdom to keep element status correctly
+          // Preserve inline transform scale on the fit root
+          if (fromEl.id === '__wsd_fit_root') {
+            toEl.style.transform = fromEl.style.transform;
+          }
           return true;
         }
       });
+
+      // Re-trigger the fit calculation so the scale updates if the content width changed
+      if (doc.defaultView && doc.defaultView.__wsd_applyFit) {
+        doc.defaultView.__wsd_applyFit();
+      }
       
       previewState.textContent = `Rendering (updated) ${basename(p)}`;
     } else {
@@ -1519,6 +1527,7 @@ img,svg,video,canvas{max-width:100%;height:auto;}
     root.style.transform = 'scale(' + scale.toFixed(4) + ')';
   }
 
+  window.__wsd_applyFit = applyFit;
   window.addEventListener('resize', applyFit);
   window.addEventListener('load', applyFit);
   setTimeout(applyFit, 0);
