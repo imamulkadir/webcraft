@@ -621,7 +621,7 @@
 
           if (e === ".html" || e === ".htm") {
             const rec2 = WS.files.get(p);
-            const rewritten = rewriteHtmlForPreview(rec2?.text || "");
+            const rewritten = rewriteHtmlForPreview(rec2?.text || "", "", false);
             const blob = new Blob([rewritten], { type: "text/html" });
             const url = URL.createObjectURL(blob);
 
@@ -1212,7 +1212,7 @@
 `.trim();
   }
 
-  function rewriteHtmlForPreview(htmlText, originalSourceHtml = "") {
+  function rewriteHtmlForPreview(htmlText, originalSourceHtml = "", isForPreviewFrame = true) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlText, "text/html");
 
@@ -1251,18 +1251,19 @@
       if (hit?.url) s.setAttribute("src", hit.url);
     }
 
-    // ✅ Inject source positions BEFORE we wrap/scale (so DOM order stays aligned)
-    // Use originalSourceHtml when provided; fallback to htmlText
-    injectSourcePositions(doc, originalSourceHtml || htmlText);
+    if (isForPreviewFrame) {
+      // ✅ Inject source positions BEFORE we wrap/scale (so DOM order stays aligned)
+      // Use originalSourceHtml when provided; fallback to htmlText
+      injectSourcePositions(doc, originalSourceHtml || htmlText);
 
-    // Fit-to-width + prevent horizontal scrollbar
-    const style = doc.createElement("style");
-    style.textContent = `
+      // Fit-to-width + prevent horizontal scrollbar
+      const style = doc.createElement("style");
+      style.textContent = `
 html,body{height:100%;}
 body{
   margin:0;
   overflow-x:hidden;
-  background:#d4d4d4;
+  background:#ffffff;
 }
 img,svg,video,canvas{max-width:100%;height:auto;}
 #__wsd_fit_container{
@@ -1279,22 +1280,22 @@ img,svg,video,canvas{max-width:100%;height:auto;}
   will-change: transform;
 }
 `.trim();
-    doc.head.appendChild(style);
+      doc.head.appendChild(style);
 
-    // Wrap existing body content into container/root for scaling
-    const container = doc.createElement("div");
-    container.id = "__wsd_fit_container";
+      // Wrap existing body content into container/root for scaling
+      const container = doc.createElement("div");
+      container.id = "__wsd_fit_container";
 
-    const root = doc.createElement("div");
-    root.id = "__wsd_fit_root";
+      const root = doc.createElement("div");
+      root.id = "__wsd_fit_root";
 
-    while (doc.body.firstChild) root.appendChild(doc.body.firstChild);
-    container.appendChild(root);
-    doc.body.appendChild(container);
+      while (doc.body.firstChild) root.appendChild(doc.body.firstChild);
+      container.appendChild(root);
+      doc.body.appendChild(container);
 
-    // Scale script
-    const fitScript = doc.createElement("script");
-    fitScript.textContent = `
+      // Scale script
+      const fitScript = doc.createElement("script");
+      fitScript.textContent = `
 (function(){
   function applyFit(){
     var root = document.getElementById('__wsd_fit_root');
@@ -1319,12 +1320,13 @@ img,svg,video,canvas{max-width:100%;height:auto;}
   setTimeout(applyFit, 250);
 })();
 `.trim();
-    doc.body.appendChild(fitScript);
+      doc.body.appendChild(fitScript);
 
-    // ✅ Click bridge script (preview -> editor)
-    const bridge = doc.createElement("script");
-    bridge.textContent = buildPreviewClickBridgeScript();
-    doc.body.appendChild(bridge);
+      // ✅ Click bridge script (preview -> editor)
+      const bridge = doc.createElement("script");
+      bridge.textContent = buildPreviewClickBridgeScript();
+      doc.body.appendChild(bridge);
+    }
 
     return "<!doctype html>\n" + doc.documentElement.outerHTML;
   }
