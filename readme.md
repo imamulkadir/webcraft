@@ -6,18 +6,15 @@ WebCraft runs entirely in the browser and works perfectly when deployed on **Git
 
 ---
 
-# ✨ Features
+## ✨ Features
 
 ### 📂 Folder Workspace
-
 Load an entire project folder directly into the browser.
-
 - Supports folder selection via `webkitdirectory`
 - Automatically detects project files
 - Displays files grouped by type
 
-Supported file types:
-
+**Supported file types:**
 | Type       | Extensions                                       |
 | ---------- | ------------------------------------------------ |
 | HTML       | `.html`, `.htm`                                  |
@@ -27,109 +24,76 @@ Supported file types:
 | Images     | `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg` |
 | Text       | `.txt`, `.md`                                    |
 
----
-
 ### 🧠 Full Code Editor (Monaco)
-
 WebCraft uses the **Monaco Editor** (the same editor used in VS Code).
-
 Features include:
-
-- syntax highlighting
-- undo / redo
-- live editing
-- multiple language support
-- line wrapping
-- automatic layout
-
----
+- Syntax highlighting
+- Undo / redo
+- Live editing
+- Multiple language support
+- Line wrapping
+- Automatic layout
 
 ### 👀 Live Preview
-
 HTML files render instantly in the preview pane.
-
-- updates automatically when code changes
-- images and assets are dynamically resolved
-- preview content is sandboxed for safety
-- layout automatically scales to fit the screen
-
----
+- Updates automatically when code changes (using `morphdom` for seamless DOM-diffing updates)
+- Images and assets are dynamically resolved
+- Preview content is sandboxed for safety
+- Layout automatically scales to fit the screen
 
 ### 🖱 Click-to-Code Navigation
-
 Click any element in the preview and WebCraft will:
-
-1. locate the element in the source HTML
-2. scroll the editor to that location
-3. highlight the corresponding block
-
-This makes inspecting and editing HTML much faster.
-
----
+1. Locate the element in the source HTML
+2. Scroll the editor to that location
+3. Highlight the corresponding block
 
 ### 🖼 Image Inspection
-
 Images in the workspace can be opened in a built-in viewer for quick inspection.
 
----
-
 ### 📦 Export Project
-
 Download the **entire edited workspace** as a ZIP file.
-
-- includes all modified files
-- preserves folder structure
-- uses the latest editor content
-- does **not include an extra root folder**
-
----
+- Includes all modified files
+- Preserves folder structure
+- Uses the latest editor content
+- Does **not** include an extra root folder
 
 ### ⚡ Fully Client-Side
-
 WebCraft runs entirely in the browser.
-
-- no backend
-- no file uploads
-- no server processing
-- perfect for static hosting
-
-All files remain local to the user’s machine.
+- No backend
+- No file uploads
+- No server processing
+- Perfect for static hosting
 
 ---
 
-# 🚀 Demo
+## 🚀 Demo
 
 You can deploy WebCraft easily using **GitHub Pages**.
 
-Example URL:
-https://imamulkadir.github.io/webcraft
+**Example URL:**
+[https://imamulkadir.github.io/webcraft](https://imamulkadir.github.io/webcraft)
 
 ---
 
-# 🛠 How It Works
+## 🛠 How It Works
 
 WebCraft loads files using the browser's **File API**.
 
-Workflow:
-
+**Workflow:**
 1. User selects a folder
 2. Browser provides file handles
-3. Files are read into memory
+3. Files are read into memory using IndexedDB
 4. Blob URLs are generated for assets
 5. HTML references are rewritten dynamically
 6. Preview iframe renders the result
 
-Images and assets are displayed using:
-
-`URL.createObjectURL(file)`
-
-This allows local files to be previewed safely inside the browser.
+Images and assets are displayed using `URL.createObjectURL(file)`, which allows local files to be previewed safely inside the browser.
 
 ---
 
-# 📁 Project Structure
+## 📁 Project Structure
 
-```
+```text
 webcraft/
 │
 ├── index.html
@@ -141,27 +105,17 @@ webcraft/
 
 ---
 
-# 🧩 Dependencies
+## 🧩 Dependencies
 
-WebCraft uses two CDN dependencies.
+WebCraft uses CDN dependencies:
 
-### Monaco Editor
-
-https://cdn.jsdelivr.net/npm/monaco-editor
-
-Used for the code editing interface.
+- **Monaco Editor:** [https://cdn.jsdelivr.net/npm/monaco-editor](https://cdn.jsdelivr.net/npm/monaco-editor) - Used for the code editing interface.
+- **JSZip:** [https://cdn.jsdelivr.net/npm/jszip](https://cdn.jsdelivr.net/npm/jszip) - Used to generate downloadable ZIP exports of the workspace.
+- **Morphdom:** [https://cdn.jsdelivr.net/npm/morphdom](https://cdn.jsdelivr.net/npm/morphdom) - Used for precise DOM updates to avoid iframe flashing.
 
 ---
 
-### JSZip
-
-https://cdn.jsdelivr.net/npm/jszip
-
-Used to generate downloadable ZIP exports of the workspace.
-
----
-
-# 🌐 Browser Support
+## 🌐 Browser Support
 
 | Browser | Status                              |
 | ------- | ----------------------------------- |
@@ -171,91 +125,58 @@ Used to generate downloadable ZIP exports of the workspace.
 | Safari  | ⚠ Limited `webkitdirectory` support |
 | Mobile  | ⚠ Not recommended                   |
 
-Best experience is on **desktop Chrome or Edge**.
+**Best experience is on desktop Chrome or Edge.**
 
 ---
 
-# ⚠ Limitations
+## ⚠ Limitations
 
 Because WebCraft runs entirely in the browser:
-
-- users must select a folder each session
-- browser security prevents automatic file access
-- folder access resets on page refresh
-- large projects may increase memory usage
+- Users must select a folder or drop files on first load, though recent updates persist data via IndexedDB across refreshes.
+- Browser security prevents automatic unrestricted file access.
+- Huge projects may increase memory usage.
 
 ---
 
-# 🔒 Security
+## 🔒 Security
 
 All previews are rendered in a sandboxed iframe:
-
 `sandbox="allow-same-origin allow-scripts allow-forms allow-popups"`
 
 This prevents previewed code from accessing the parent application.
 
 ---
 
-# 🧑‍💻 Author
+## ❤️ Why WebCraft
+
+WebCraft was built to provide a **simple, zero-install HTML workspace** for quickly inspecting, editing, and previewing web projects directly in the browser.
+
+**Perfect for:**
+- Reviewing HTML exports
+- Inspecting downloaded templates
+- Editing small web projects
+- Learning front-end development
+
+---
+
+## 🧑‍💻 Author
 
 [**Imamul Kadir**](https://linkedin.com/in/imamulkadir)
 
 ---
 
-# 📄 License
+## 📄 License
 
-MIT License
-
-You are free to use, modify, and distribute this project.
+**MIT License:** You are free to use, modify, and distribute this project.
 
 ---
 
-# ⭐ Contributing
+## ⭐ Contributing
 
 Contributions, improvements, and suggestions are welcome.
-
-If you'd like to contribute:
-
 1. Fork the repository
 2. Create a new branch
 3. Submit a pull request
-
----
-
-# 🧠 Future Improvements
-
-Planned enhancements:
-
-- multi-file search
-- drag-and-drop file loading
-- code formatting
-- file tree explorer
-- dark/light theme switching
-- project persistence using IndexedDB
-- offline PWA support
-
----
-
-# 🧪 Built With
-
-- HTML
-- CSS
-- Vanilla JavaScript
-- Monaco Editor
-- JSZip
-
----
-
-# ❤️ Why WebCraft
-
-WebCraft was built to provide a **simple, zero-install HTML workspace** for quickly inspecting, editing, and previewing web projects directly in the browser.
-
-Perfect for:
-
-- reviewing HTML exports
-- inspecting downloaded templates
-- editing small web projects
-- learning front-end development
 
 ---
 
