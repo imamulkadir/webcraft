@@ -1063,23 +1063,46 @@
     if (!rec || rec.kind !== "text") {
       previewState.textContent = "Unable to preview";
       previewFrame.srcdoc = emptyPreviewDoc("Unable to preview.");
+      previewFrame.removeAttribute("data-loaded-path");
       return;
     }
 
     rebuildNameMaps();
 
     const rewritten = rewriteHtmlForPreview(rec.text ?? "", rec.text ?? "");
+    const doc = previewFrame.contentDocument || previewFrame.contentWindow?.document;
 
-    // ✅ smooth swap: dim while loading, restore onload
-    previewFrame.classList.add("is-loading");
+    // Use morphdom if the iframe is already loaded with the same path and morphdom is available
+    if (
+      window.morphdom &&
+      doc &&
+      doc.readyState === "complete" &&
+      doc.body &&
+      previewFrame.getAttribute("data-loaded-path") === p
+    ) {
+      const parser = new DOMParser();
+      const newDoc = parser.parseFromString(rewritten, "text/html");
+      
+      window.morphdom(doc.documentElement, newDoc.documentElement, {
+        onBeforeElUpdated: function(fromEl, toEl) {
+          // Allows morphdom to keep element status correctly
+          return true;
+        }
+      });
+      
+      previewState.textContent = `Rendering (updated) ${basename(p)}`;
+    } else {
+      // ✅ Initial or cross-file load: smooth swap 
+      previewFrame.classList.add("is-loading");
+      previewFrame.setAttribute("data-loaded-path", p);
 
-    previewFrame.onload = () => {
-      // attach click bridge is inside srcdoc already; but keep any parent-side hooks here if needed
-      previewFrame.classList.remove("is-loading");
-    };
+      previewFrame.onload = () => {
+        previewFrame.classList.remove("is-loading");
+      };
 
-    previewFrame.srcdoc = rewritten;
-    previewState.textContent = `Rendering ${basename(p)}`;
+      previewFrame.srcdoc = rewritten;
+      previewState.textContent = `Rendering ${basename(p)}`;
+    }
   }
 
   // -----------------------------------------
