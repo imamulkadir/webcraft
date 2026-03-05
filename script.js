@@ -50,7 +50,6 @@
   const HIGHLIGHT_TAG_PRIORITY = [
     "img",
     "p",
-    "div",
     "td",
     "th",
     "tr",
@@ -65,6 +64,7 @@
     "main",
     "nav",
     "aside",
+    "div",
     "span",
     "font",
     "b",
@@ -913,7 +913,7 @@
         } else {
           if (WS.previewHtmlPath) updatePreview(WS.previewHtmlPath);
         }
-      }, 300);
+      }, 150);
     });
   }
 
@@ -1348,15 +1348,37 @@
     var el = closestWithStart(target);
     if(!el) return null;
 
-    // If we clicked inside nested tags, prefer the nearest ancestor among priority tags
-    // (ex: click <font> inside <p> -> highlight <p>)
+    // --- NEW: if click is inside a table, prefer the closest cell/header ---
+    // Find the nearest table-ish node in the ancestry.
+    var tableAncestor = null;
+    var scan = el;
+    while(scan && scan !== document.documentElement){
+      var t = (scan.getAttribute && scan.getAttribute('data-wsd-tag')) || scan.tagName || '';
+      t = String(t).toLowerCase();
+      if(t === 'td' || t === 'th' || t === 'tr' || t === 'table'){
+        tableAncestor = scan;
+        break;
+      }
+      scan = scan.parentElement;
+    }
+
+    if(tableAncestor){
+      // Hard-prefer the closest td/th if present.
+      var cell = el.closest && el.closest('td,th');
+      if(cell && cell.hasAttribute('data-wsd-start')) return cell;
+
+      // Otherwise prefer tr/table (whatever we found first)
+      if(tableAncestor.hasAttribute('data-wsd-start')) return tableAncestor;
+    }
+
+    // --- Existing behavior (non-table clicks): choose best by priority ---
     var cur = el;
     var best = el;
     var bestRank = 999999;
 
     function rank(tag){
       tag = String(tag||'').toLowerCase();
-      var arr = ${JSON.stringify(HIGHLIGHT_TAG_PRIORITY)};
+      var arr = ["img","p","td","th","tr","table","li","ul","ol","section","article","header","footer","main","nav","aside","div","span","font","b","strong","i","em","a"];
       var i = arr.indexOf(tag);
       return i === -1 ? 999999 : i;
     }
@@ -1367,7 +1389,7 @@
         if(r < bestRank){
           best = cur;
           bestRank = r;
-          if(r === 0) break; // img is best possible
+          if(r === 0) break;
         }
       }
       cur = cur.parentElement;
