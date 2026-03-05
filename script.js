@@ -119,7 +119,7 @@
 
   // Workspace in-memory store
   const WS = {
-    // path -> { path, name, file, kind:'text'|'image', text?:string, size:number }
+    // path -> { path, name, file_name, file_type, file_blob, kind:'text'|'image', text?:string, size:number }
     files: new Map(),
     // blob url cache by path: path -> url
     urlByPath: new Map(),
@@ -134,6 +134,89 @@
     // current active editor path
     activePath: null,
   };
+
+  // ---------------------------
+  // IndexedDB Persistence
+  // ---------------------------
+  const DB_NAME = "WebCraftDB";
+  const DB_VERSION = 1;
+
+  async function initDB() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains("workspace")) {
+          db.createObjectStore("workspace", { keyPath: "path" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function clearDB() {
+    try {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("workspace", "readwrite");
+        const store = tx.objectStore("workspace");
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn("Failed to clear DB", err);
+    }
+  }
+
+  async function saveFileToDB(rec) {
+    try {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("workspace", "readwrite");
+        const store = tx.objectStore("workspace");
+        
+        // Pick fields carefully so we don't try storing complex objects we can't clone.
+        const data = {
+          path: rec.path,
+          name: rec.name,
+          kind: rec.kind,
+          size: rec.size,
+          file_name: rec.file_name,
+          file_type: rec.file_type,
+        };
+        
+        if (rec.kind === "text") {
+          data.text = rec.text;
+        } else if (rec.file_blob) {
+          data.file_blob = rec.file_blob;
+        }
+
+        const req = store.put(data);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn("Failed to save to DB:", rec.path, err);
+    }
+  }
+
+  async function loadWorkspaceFromDB() {
+    try {
+      const db = await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("workspace", "readonly");
+        const store = tx.objectStore("workspace");
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    } catch (err) {
+      console.warn("Failed to load workspace from DB", err);
+      return [];
+    }
+  }
 
   function revokeAllUrls() {
     for (const url of WS.urlByPath.values()) {
@@ -169,7 +252,7 @@
     if (!rec) return null;
 
     const url = URL.createObjectURL(
-      new Blob([rec.file], { type: mimeForPath(p) }),
+      new Blob([rec.file_blob || rec.text || ""], { type: rec.file_type || mimeForPath(p) }),
     );
     WS.urlByPath.set(p, url);
     return url;
@@ -297,18 +380,19 @@
   // ---------------------------
   // Folder ingest
   // ---------------------------
-  folderPicker.addEventListener("change", async () => {
+  async function processFiles(list) {
     try {
-      clearWorkspace();
-      const list = Array.from(folderPicker.files || []);
       if (!list.length) {
         setLandingStatus("No folder selected.");
         return;
       }
 
+      clearWorkspace();
+      await clearDB();
+
       const supported = [];
       for (const f of list) {
-        const rel = normalizePath(f.webkitRelativePath || f.name);
+        const rel = normalizePath(f.webkitRelativePath || f.customPath || f.name);
         const e = extOf(rel);
         if (SUPPORTED_TEXT_EXT.has(e) || SUPPORTED_IMG_EXT.has(e)) {
           supported.push({ file: f, path: rel });
@@ -331,14 +415,20 @@
           const rec = {
             path,
             name: basename(path),
-            file,
+            file_name: file.name,
+            file_type: file.type || mimeForPath(path),
             kind,
             size: file.size,
           };
           if (kind === "text") {
             rec.text = await readFileAsText(file);
+          } else {
+            // For images, store as an ArrayBuffer -> Blob to save into IndexedDB
+            const buf = await file.arrayBuffer();
+            rec.file_blob = new Blob([buf], { type: rec.file_type });
           }
           WS.files.set(path, rec);
+          await saveFileToDB(rec);
         }),
       );
 
@@ -377,7 +467,77 @@
         "err",
       );
     }
+  }
+
+  folderPicker.addEventListener("change", () => {
+    processFiles(Array.from(folderPicker.files || []));
   });
+
+  // ---------------------------
+  // Drag and drop ingest
+  // ---------------------------
+  const landingCard = document.querySelector(".landing-card");
+  if (landingCard) {
+    landingCard.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      landingCard.classList.add("drag-over");
+    });
+    
+    landingCard.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      landingCard.classList.remove("drag-over");
+    });
+    
+    landingCard.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      landingCard.classList.remove("drag-over");
+
+      if (!e.dataTransfer || !e.dataTransfer.items) return;
+      
+      const items = Array.from(e.dataTransfer.items)
+        .filter(item => item.kind === 'file')
+        .map(item => item.webkitGetAsEntry());
+      
+      const files = [];
+      setLandingStatus("Scanning dropped files...");
+      
+      async function traverse(entry, path = "") {
+        if (!entry) return;
+        if (entry.isFile) {
+          return new Promise(resolve => {
+            entry.file(f => {
+              Object.defineProperty(f, 'customPath', { value: path + f.name });
+              files.push(f);
+              resolve();
+            });
+          });
+        } else if (entry.isDirectory) {
+          const dirReader = entry.createReader();
+          return new Promise(resolve => {
+            const readEntries = () => {
+              dirReader.readEntries(async entries => {
+                if (entries.length === 0) {
+                  resolve();
+                } else {
+                  for (const e of entries) {
+                    await traverse(e, path + entry.name + '/');
+                  }
+                  readEntries();
+                }
+              });
+            };
+            readEntries();
+          });
+        }
+      }
+      
+      for (const entry of items) {
+        await traverse(entry);
+      }
+      
+      await processFiles(files);
+    });
+  }
 
   let __wsdExporting = false;
 
@@ -427,9 +587,8 @@
 
         if (rec.kind === "text") {
           zip.file(zipPath, getLatestTextForPath(rec.path));
-        } else {
-          const buf = await rec.file.arrayBuffer();
-          zip.file(zipPath, buf);
+        } else if (rec.file_blob) {
+          zip.file(zipPath, rec.file_blob);
         }
       }
 
@@ -738,6 +897,8 @@
       const rec = WS.files.get(p);
       if (rec && rec.kind === "text") {
         rec.text = model.getValue();
+        // Fire and forget save to IDB so it persists on reload
+        saveFileToDB(rec).catch(console.warn);
       }
 
       // ✅ Debounce preview update (wait for typing to stop + 300ms)
@@ -1331,12 +1492,56 @@ img,svg,video,canvas{max-width:100%;height:auto;}
     return "<!doctype html>\n" + doc.documentElement.outerHTML;
   }
 
-  // On unload, cleanup
+  // On unload, cleanup ONLY blob URLs and monaco models, NOT the persistent files
   window.addEventListener("beforeunload", () => {
-    clearWorkspace();
+    // Only clear memory assets that leak, dont clear WS.files so we don't accidentally wipe
+    // before closing if there's a race condition.
+    for (const m of WS.models.values()) {
+      try { m.dispose(); } catch {}
+    }
+    revokeAllUrls();
   });
 
   // Init state
-  setLandingStatus("No folder selected.");
-  showLanding();
+  setLandingStatus("Checking for saved workspace...");
+
+  loadWorkspaceFromDB().then((savedFiles) => {
+    if (savedFiles && savedFiles.length > 0) {
+      setLandingStatus(`Restoring ${savedFiles.length} file(s) from previous session...`);
+      
+      for (const rec of savedFiles) {
+        WS.files.set(rec.path, rec);
+      }
+
+      // Prebuild blob URLs for images and assets (css/js/...)
+      for (const [path, rec] of WS.files.entries()) {
+        if (rec.kind === "image") {
+          ensureBlobUrlForPath(path);
+        } else {
+          const e = extOf(path);
+          if (e !== ".html" && e !== ".htm") {
+            ensureBlobUrlForPath(path);
+          }
+        }
+      }
+
+      rebuildNameMaps();
+      chooseDefaultPreviewHtml();
+      renderWorkspaceList();
+
+      if (exportZipBtn) exportZipBtn.disabled = false;
+      convMeta.textContent = `${savedFiles.length} file(s) restored`;
+      contentSummary.textContent = summarizeCounts();
+
+      setLandingStatus(`Restored ✅ ${savedFiles.length} file(s).`, "ok");
+      openDrawerBtn.disabled = false;
+    } else {
+      setLandingStatus("No folder selected.");
+    }
+  }).catch((err) => {
+    console.error("Error loading workspace from DB:", err);
+    setLandingStatus("No folder selected.");
+  }).finally(() => {
+    showLanding();
+  });
 })();

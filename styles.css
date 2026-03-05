@@ -246,6 +246,12 @@ body {
   background: rgba(255, 255, 255, 0.05);
   box-shadow: var(--shadow);
   padding: 26px;
+  transition: border-color var(--trans), background var(--trans), transform var(--trans);
+}
+.landing-card.drag-over {
+  border-color: rgba(110, 231, 255, 0.45);
+  background: rgba(110, 231, 255, 0.03);
+  transform: scale(1.01);
 }
 .landing-title {
   margin: 0;
