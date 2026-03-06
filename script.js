@@ -322,7 +322,20 @@
   const imageInspectorImg = document.getElementById("imageInspectorImg");
   const imageInspectorMeta = document.getElementById("imageInspectorMeta");
 
-  const previewFrame = document.getElementById("previewFrame");
+  // Preview frames for double-buffering (prevents white flash)
+  let previewFrame = document.getElementById("previewFrame");
+  let previewFrameB = document.getElementById("previewFrameB");
+  // Helper to get the currently visible frame
+  function getActiveFrame() {
+    return previewFrame.classList.contains("visible-frame") ? previewFrame : previewFrameB;
+  }
+  function getBufferFrame() {
+    return previewFrame.classList.contains("visible-frame") ? previewFrameB : previewFrame;
+  }
+
+  // Initial visibility
+  previewFrame.classList.add("visible-frame");
+  previewFrameB.classList.add("hidden-frame");
   const noHtmlPreview = document.getElementById("noHtmlPreview");
   const downloadHtmlBtn = document.getElementById("downloadHtmlBtn");
   const downloadZipBtn2 = document.getElementById("downloadZipBtn2");
@@ -1016,7 +1029,9 @@
         } else {
           noHtmlPreview.hidden = false;
           previewState.textContent = "—";
-          previewFrame.srcdoc = emptyPreviewDoc("No HTML selected.");
+          const doc = emptyPreviewDoc("No HTML selected.");
+          previewFrame.srcdoc = doc;
+          previewFrameB.srcdoc = doc;
         }
       })
       .catch((err) => {
@@ -1048,6 +1063,7 @@
       noHtmlPreview.hidden = false;
       previewState.textContent = "—";
       previewFrame.srcdoc = emptyPreviewDoc("No HTML selected.");
+      previewFrameB.srcdoc = emptyPreviewDoc("No HTML selected.");
     }
   }
 
@@ -1060,17 +1076,25 @@
   function updatePreview(htmlPath) {
     const p = normalizePath(htmlPath);
     const rec = WS.files.get(p);
+    
+    // Get both frames
+    const active = getActiveFrame();
+    const buffer = getBufferFrame();
+
     if (!rec || rec.kind !== "text") {
       previewState.textContent = "Unable to preview";
-      previewFrame.srcdoc = emptyPreviewDoc("Unable to preview.");
-      previewFrame.removeAttribute("data-loaded-path");
+      const doc = emptyPreviewDoc("Unable to preview.");
+      active.srcdoc = doc;
+      buffer.srcdoc = doc;
+      active.removeAttribute("data-loaded-path");
+      buffer.removeAttribute("data-loaded-path");
       return;
     }
 
-    // Capture current scroll
+    // Capture current scroll from the active frame
     let sx = 0, sy = 0;
     try {
-      const win = previewFrame.contentWindow;
+      const win = active.contentWindow;
       if (win) {
         sx = win.scrollX;
         sy = win.scrollY;
@@ -1081,30 +1105,44 @@
 
     const rewritten = rewriteHtmlForPreview(rec.text ?? "", rec.text ?? "");
     
-    // Switch to blob URLs for bit-for-bit rendering parity with the "Open" (↗) tab
-    const oldUrl = previewFrame.getAttribute("data-preview-url");
+    // 1. Revoke old buffer URL if any
+    const oldUrl = buffer.getAttribute("data-preview-url");
     if (oldUrl) {
       try { URL.revokeObjectURL(oldUrl); } catch {}
     }
 
+    // 2. Create new Blob URL
     const blob = new Blob([rewritten], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     
-    previewFrame.setAttribute("data-preview-url", url);
-    previewFrame.src = url;
+    buffer.setAttribute("data-preview-url", url);
+    buffer.setAttribute("data-loaded-path", p);
 
-    // Restore scroll after load
-    const restore = () => {
+    // 3. Setup the swap on load
+    buffer.onload = () => {
+      // Restore scroll
       try {
-        previewFrame.contentWindow.scrollTo(sx, sy);
+        buffer.contentWindow.scrollTo(sx, sy);
       } catch (e) {}
+
+      // Swap visibility
+      buffer.classList.remove("hidden-frame");
+      buffer.classList.add("visible-frame");
+      active.classList.remove("visible-frame");
+      active.classList.add("hidden-frame");
+
+      // Optional: Clear active frame to release memory faster
+      // (Wait a bit so the transition is smooth)
+      setTimeout(() => {
+        if (active.classList.contains("hidden-frame")) {
+           // Clear old content to keep it clean
+           // active.src = "about:blank"; 
+        }
+      }, 500);
     };
 
-    // We use multiple triggers for the best chance of restoration after layout settling
-    previewFrame.onload = restore;
-    setTimeout(restore, 0);
-    setTimeout(restore, 30);
-    setTimeout(restore, 100);
+    // 4. Start loading into buffer
+    buffer.src = url;
 
     previewState.textContent = `Rendering ${basename(p)}`;
   }

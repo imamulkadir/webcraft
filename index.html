@@ -231,9 +231,16 @@
             </div>
 
             <div class="pane-wrap preview-wrap">
-              <iframe
+               <iframe
                 id="previewFrame"
                 title="HTML Preview"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
+                referrerpolicy="no-referrer"
+              ></iframe>
+              <iframe
+                id="previewFrameB"
+                title="HTML Preview Buffer"
+                class="hidden-frame"
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals allow-downloads"
                 referrerpolicy="no-referrer"
               ></iframe>
