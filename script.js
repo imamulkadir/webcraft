@@ -1081,8 +1081,17 @@
 
     const rewritten = rewriteHtmlForPreview(rec.text ?? "", rec.text ?? "");
     
-    // Use srcdoc for snappier live updates
-    previewFrame.srcdoc = rewritten;
+    // Switch to blob URLs for bit-for-bit rendering parity with the "Open" (↗) tab
+    const oldUrl = previewFrame.getAttribute("data-preview-url");
+    if (oldUrl) {
+      try { URL.revokeObjectURL(oldUrl); } catch {}
+    }
+
+    const blob = new Blob([rewritten], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    
+    previewFrame.setAttribute("data-preview-url", url);
+    previewFrame.src = url;
 
     // Restore scroll after load
     const restore = () => {
@@ -1090,9 +1099,12 @@
         previewFrame.contentWindow.scrollTo(sx, sy);
       } catch (e) {}
     };
+
+    // We use multiple triggers for the best chance of restoration after layout settling
     previewFrame.onload = restore;
     setTimeout(restore, 0);
-    setTimeout(restore, 40);
+    setTimeout(restore, 30);
+    setTimeout(restore, 100);
 
     previewState.textContent = `Rendering ${basename(p)}`;
   }
@@ -1340,30 +1352,7 @@
     var el = closestWithStart(target);
     if(!el) return null;
 
-    // --- NEW: if click is inside a table, prefer the closest cell/header ---
-    // Find the nearest table-ish node in the ancestry.
-    var tableAncestor = null;
-    var scan = el;
-    while(scan && scan !== document.documentElement){
-      var t = (scan.getAttribute && scan.getAttribute('data-wsd-tag')) || scan.tagName || '';
-      t = String(t).toLowerCase();
-      if(t === 'td' || t === 'th' || t === 'tr' || t === 'table'){
-        tableAncestor = scan;
-        break;
-      }
-      scan = scan.parentElement;
-    }
-
-    if(tableAncestor){
-      // Hard-prefer the closest td/th if present.
-      var cell = el.closest && el.closest('td,th');
-      if(cell && cell.hasAttribute('data-wsd-start')) return cell;
-
-      // Otherwise prefer tr/table (whatever we found first)
-      if(tableAncestor.hasAttribute('data-wsd-start')) return tableAncestor;
-    }
-
-    // --- Existing behavior (non-table clicks): choose best by priority ---
+    // --- choose best by priority ---
     var cur = el;
     var best = el;
     var bestRank = 999999;
@@ -1413,36 +1402,42 @@
   function rewriteHtmlForPreview(htmlText, originalSourceHtml = "", isForPreviewFrame = true) {
     let raw = htmlText || "";
 
-    // 1. Rebuild name maps for URL replacement
+    // 1. Rebuild name maps (needed for URL replacement)
     rebuildNameMaps();
 
-    // 2. Rewrite URLs (Regex-based - Non-destructive)
-    // Matches src="..." or href="..." - case insensitive
-    raw = raw.replace(/(src|href)\s*=\s*(['"])([^'"]+)\2/gi, (match, attr, q, val) => {
-      const file = basename(val).toLowerCase();
-      const hit = WS.imageByName.get(file) || WS.assetByName.get(file);
-      return hit ? `${attr}=${q}${hit.url}${q}` : match;
-    });
-
+    // 2. STAGE 1: Inject Preview-only attributes (SINGLE-PASS for 100% accurate offsets)
     if (isForPreviewFrame) {
-      // 3. Inject Source Positions (Regex-based - Non-destructive)
-      raw = raw.replace(/<([A-Za-z][A-Za-z0-9:-]*)([^>]*?)>/g, (match, tag, rest, offset) => {
-        if (tag.startsWith("!") || tag.startsWith("?")) return match;
-        const tagLower = tag.toLowerCase();
-        if (rest.includes("data-wsd-start")) return match;
-        return `<${tag} data-wsd-start="${offset}" data-wsd-tag="${tagLower}"${rest}>`;
+      const skipTags = /^(html|head|meta|title|link|script|style)$/i;
+      
+      // We match either a block to skip (script/style/etc) OR a tag to inject.
+      // Offset is relative to the START of the match in 'raw' (the original source string).
+      raw = raw.replace(/<(script|style|title|head)(?:[^>]*?)>[\s\S]*?<\/\1>|<([A-Za-z][A-Za-z0-9:-]*)([^>]*?)>/gi, (match, blockTag, normalTag, rest, offset) => {
+          if (blockTag) return match; // Skip the whole block untouched
+          
+          if (normalTag.startsWith("!") || normalTag.startsWith("?")) return match;
+          const tagLower = normalTag.toLowerCase();
+          if (skipTags.test(tagLower)) return match;
+          if (rest.includes("data-wsd-start")) return match;
+
+          // Inject data-wsd-start using the ACCURATE offset
+          return `<${normalTag} data-wsd-start="${offset}"${rest}>`;
       });
 
-      // 4. Inject Click Bridge
+      // Inject Click Bridge at end of body or end of string
       const bridgeScript = `<script id="__wsd_bridge">` + buildPreviewClickBridgeScript() + `</script>`;
-
-      // Inject at end of body
       if (raw.toLowerCase().includes("</body>")) {
          raw = raw.replace(/<\/body>/i, match => bridgeScript + match);
       } else {
          raw += bridgeScript;
       }
     }
+
+    // 3. STAGE 2: URL Replacement (SECOND! After offsets are secured)
+    raw = raw.replace(/(src|href)\s*=\s*(['"])([^'"]+)\2/gi, (match, attr, q, val) => {
+      const file = basename(val).toLowerCase();
+      const hit = WS.imageByName.get(file) || WS.assetByName.get(file);
+      return hit ? `${attr}=${q}${hit.url}${q}` : match;
+    });
 
     return raw;
   }
