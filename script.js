@@ -339,9 +339,8 @@
     const e = extOf(p);
     if (e !== ".html" && e !== ".htm") return;
 
-    const rec = WS.files.get(p);
-    const rewritten = rewriteHtmlForPreview(rec?.text || "");
-    const blob = new Blob([rewritten], { type: "text/html" });
+    const rawText = getLatestTextForPath(p);
+    const blob = new Blob([rawText], { type: "text/html" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -781,6 +780,7 @@
           if (e === ".html" || e === ".htm") {
             const rec2 = WS.files.get(p);
             const rewritten = rewriteHtmlForPreview(rec2?.text || "", "", false);
+
             const blob = new Blob([rewritten], { type: "text/html" });
             const url = URL.createObjectURL(blob);
 
@@ -1070,47 +1070,19 @@
     rebuildNameMaps();
 
     const rewritten = rewriteHtmlForPreview(rec.text ?? "", rec.text ?? "");
-    const doc = previewFrame.contentDocument || previewFrame.contentWindow?.document;
-
-    // Use morphdom if the iframe is already loaded with the same path and morphdom is available
-    if (
-      window.morphdom &&
-      doc &&
-      doc.readyState === "complete" &&
-      doc.body &&
-      previewFrame.getAttribute("data-loaded-path") === p
-    ) {
-      const parser = new DOMParser();
-      const newDoc = parser.parseFromString(rewritten, "text/html");
-      
-      window.morphdom(doc.documentElement, newDoc.documentElement, {
-        onBeforeElUpdated: function(fromEl, toEl) {
-          // Preserve inline transform scale on the fit root
-          if (fromEl.id === '__wsd_fit_root') {
-            toEl.style.transform = fromEl.style.transform;
-          }
-          return true;
-        }
-      });
-
-      // Re-trigger the fit calculation so the scale updates if the content width changed
-      if (doc.defaultView && doc.defaultView.__wsd_applyFit) {
-        doc.defaultView.__wsd_applyFit();
-      }
-      
-      previewState.textContent = `Rendering (updated) ${basename(p)}`;
-    } else {
-      // ✅ Initial or cross-file load: smooth swap 
-      previewFrame.classList.add("is-loading");
-      previewFrame.setAttribute("data-loaded-path", p);
-
-      previewFrame.onload = () => {
-        previewFrame.classList.remove("is-loading");
-      };
-
-      previewFrame.srcdoc = rewritten;
-      previewState.textContent = `Rendering ${basename(p)}`;
+    
+    // Revoke old URL if any
+    const oldUrl = previewFrame.getAttribute("data-preview-url");
+    if (oldUrl) {
+      try { URL.revokeObjectURL(oldUrl); } catch {}
     }
+
+    const blob = new Blob([rewritten], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    
+    previewFrame.setAttribute("data-preview-url", url);
+    previewFrame.src = url;
+    previewState.textContent = `Rendering ${basename(htmlPath)}`;
   }
 
   // -----------------------------------------
@@ -1427,123 +1399,42 @@
   }
 
   function rewriteHtmlForPreview(htmlText, originalSourceHtml = "", isForPreviewFrame = true) {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, "text/html");
+    let raw = htmlText || "";
 
-    if (!doc.querySelector("meta[charset]")) {
-      const meta = doc.createElement("meta");
-      meta.setAttribute("charset", "utf-8");
-      doc.head.prepend(meta);
-    }
+    // 1. Rebuild name maps for URL replacement
+    rebuildNameMaps();
 
-    // Replace IMG src (filename-only matching)
-    for (const img of Array.from(doc.querySelectorAll("img[src]"))) {
-      const src = (img.getAttribute("src") || "").trim();
-      if (!src) continue;
-      const file = basename(src).toLowerCase();
-      const hit = WS.imageByName.get(file);
-      if (hit?.url) img.setAttribute("src", hit.url);
-    }
-
-    // Rewrite CSS link href by filename
-    for (const link of Array.from(
-      doc.querySelectorAll('link[rel~="stylesheet"][href]'),
-    )) {
-      const href = (link.getAttribute("href") || "").trim();
-      if (!href) continue;
-      const file = basename(href).toLowerCase();
-      const hit = WS.assetByName.get(file);
-      if (hit?.url) link.setAttribute("href", hit.url);
-    }
-
-    // Rewrite script src by filename
-    for (const s of Array.from(doc.querySelectorAll("script[src]"))) {
-      const src = (s.getAttribute("src") || "").trim();
-      if (!src) continue;
-      const file = basename(src).toLowerCase();
-      const hit = WS.assetByName.get(file);
-      if (hit?.url) s.setAttribute("src", hit.url);
-    }
+    // 2. Rewrite URLs (Regex-based - Non-destructive)
+    // Matches src="..." or href="..." - case insensitive
+    raw = raw.replace(/(src|href)\s*=\s*(['"])([^'"]+)\2/gi, (match, attr, q, val) => {
+      const file = basename(val).toLowerCase();
+      const hit = WS.imageByName.get(file) || WS.assetByName.get(file);
+      return hit ? `${attr}=${q}${hit.url}${q}` : match;
+    });
 
     if (isForPreviewFrame) {
-      // ✅ Inject source positions BEFORE we wrap/scale (so DOM order stays aligned)
-      // Use originalSourceHtml when provided; fallback to htmlText
-      injectSourcePositions(doc, originalSourceHtml || htmlText);
+      // Temporarily disable attribute injection to see if it fixes the user's issue
+      /*
+      raw = raw.replace(/<([A-Za-z][A-Za-z0-9:-]*)([^>]*?)>/g, (match, tag, rest, offset) => {
+        if (tag.startsWith("!") || tag.startsWith("?")) return match;
+        const tagLower = tag.toLowerCase();
+        if (rest.includes("data-wsd-start")) return match;
+        return `<${tag} data-wsd-start="${offset}" data-wsd-tag="${tagLower}"${rest}>`;
+      });
+      */
 
-      // Fit-to-width + prevent horizontal scrollbar
-      const style = doc.createElement("style");
-      style.textContent = `
-html,body{height:100%;}
-body{
-  margin:0;
-  overflow-x:hidden;
-  background:#ffffff;
-}
-img,svg,video,canvas{max-width:100%;height:auto;}
-#__wsd_fit_container{
-  width:100%;
-  display:flex;
-  justify-content:center;
-  align-items:flex-start;
-  padding: 24px 0;
-  box-sizing: border-box;
-}
-#__wsd_fit_root{
-  transform-origin: top center;
-  display:block;
-  will-change: transform;
-}
-`.trim();
-      doc.head.appendChild(style);
+      // 4. Inject Click Bridge
+      const bridgeScript = `<script id="__wsd_bridge">` + buildPreviewClickBridgeScript() + `</script>`;
 
-      // Wrap existing body content into container/root for scaling
-      const container = doc.createElement("div");
-      container.id = "__wsd_fit_container";
-
-      const root = doc.createElement("div");
-      root.id = "__wsd_fit_root";
-
-      while (doc.body.firstChild) root.appendChild(doc.body.firstChild);
-      container.appendChild(root);
-      doc.body.appendChild(container);
-
-      // Scale script
-      const fitScript = doc.createElement("script");
-      fitScript.textContent = `
-(function(){
-  function applyFit(){
-    var root = document.getElementById('__wsd_fit_root');
-    if(!root) return;
-
-    root.style.transform = 'scale(1)';
-    var natural = root.scrollWidth;
-
-    var vw = document.documentElement.clientWidth || window.innerWidth || natural;
-    if(!natural || !vw) return;
-
-    var scale = vw / natural;
-    if(scale > 1) scale = 1;
-
-    root.style.transform = 'scale(' + scale.toFixed(4) + ')';
-  }
-
-  window.__wsd_applyFit = applyFit;
-  window.addEventListener('resize', applyFit);
-  window.addEventListener('load', applyFit);
-  setTimeout(applyFit, 0);
-  setTimeout(applyFit, 60);
-  setTimeout(applyFit, 250);
-})();
-`.trim();
-      doc.body.appendChild(fitScript);
-
-      // ✅ Click bridge script (preview -> editor)
-      const bridge = doc.createElement("script");
-      bridge.textContent = buildPreviewClickBridgeScript();
-      doc.body.appendChild(bridge);
+      // Inject at end of body
+      if (raw.toLowerCase().includes("</body>")) {
+         raw = raw.replace(/<\/body>/i, match => bridgeScript + match);
+      } else {
+         raw += bridgeScript;
+      }
     }
 
-    return "<!doctype html>\n" + doc.documentElement.outerHTML;
+    return raw;
   }
 
   // On unload, cleanup ONLY blob URLs and monaco models, NOT the persistent files
