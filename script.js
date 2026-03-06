@@ -1067,22 +1067,34 @@
       return;
     }
 
+    // Capture current scroll
+    let sx = 0, sy = 0;
+    try {
+      const win = previewFrame.contentWindow;
+      if (win) {
+        sx = win.scrollX;
+        sy = win.scrollY;
+      }
+    } catch (e) {}
+
     rebuildNameMaps();
 
     const rewritten = rewriteHtmlForPreview(rec.text ?? "", rec.text ?? "");
     
-    // Revoke old URL if any
-    const oldUrl = previewFrame.getAttribute("data-preview-url");
-    if (oldUrl) {
-      try { URL.revokeObjectURL(oldUrl); } catch {}
-    }
+    // Use srcdoc for snappier live updates
+    previewFrame.srcdoc = rewritten;
 
-    const blob = new Blob([rewritten], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    
-    previewFrame.setAttribute("data-preview-url", url);
-    previewFrame.src = url;
-    previewState.textContent = `Rendering ${basename(htmlPath)}`;
+    // Restore scroll after load
+    const restore = () => {
+      try {
+        previewFrame.contentWindow.scrollTo(sx, sy);
+      } catch (e) {}
+    };
+    previewFrame.onload = restore;
+    setTimeout(restore, 0);
+    setTimeout(restore, 40);
+
+    previewState.textContent = `Rendering ${basename(p)}`;
   }
 
   // -----------------------------------------
@@ -1413,15 +1425,13 @@
     });
 
     if (isForPreviewFrame) {
-      // Temporarily disable attribute injection to see if it fixes the user's issue
-      /*
+      // 3. Inject Source Positions (Regex-based - Non-destructive)
       raw = raw.replace(/<([A-Za-z][A-Za-z0-9:-]*)([^>]*?)>/g, (match, tag, rest, offset) => {
         if (tag.startsWith("!") || tag.startsWith("?")) return match;
         const tagLower = tag.toLowerCase();
         if (rest.includes("data-wsd-start")) return match;
         return `<${tag} data-wsd-start="${offset}" data-wsd-tag="${tagLower}"${rest}>`;
       });
-      */
 
       // 4. Inject Click Bridge
       const bridgeScript = `<script id="__wsd_bridge">` + buildPreviewClickBridgeScript() + `</script>`;
