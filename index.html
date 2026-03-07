@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>WebCraft</title>
 
+    <link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0b0f17" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="WebCraft" />
+
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
 
     <link rel="stylesheet" href="styles.css" />
@@ -14,7 +21,11 @@
     <main id="landing" class="landing" aria-labelledby="appTitle">
       <div class="landing-card">
         <div class="title-row">
+          <button id="installBtn" class="btn btn-secondary" type="button" hidden>
+  Install App
+</button>
           <h1 id="appTitle" class="landing-title">
+
             <span class="code-icon">/&gt;</span> WebCraft
           </h1>
           <!-- <a

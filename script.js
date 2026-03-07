@@ -1532,4 +1532,45 @@
   }).finally(() => {
     showLanding();
   });
+
+  let deferredInstallPrompt = null;
+const installBtn = document.getElementById("installBtn");
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      await navigator.serviceWorker.register("./sw.js");
+      console.log("Service worker registered");
+    } catch (err) {
+      console.warn("Service worker registration failed:", err);
+    }
+  });
+}
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+
+  if (installBtn) {
+    installBtn.hidden = false;
+    installBtn.disabled = false;
+  }
+});
+
+installBtn?.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+
+  deferredInstallPrompt.prompt();
+  const result = await deferredInstallPrompt.userChoice;
+  console.log("Install choice:", result.outcome);
+
+  deferredInstallPrompt = null;
+  installBtn.hidden = true;
+});
+
+window.addEventListener("appinstalled", () => {
+  console.log("PWA installed");
+  deferredInstallPrompt = null;
+  if (installBtn) installBtn.hidden = true;
+});
 })();
